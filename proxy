@@ -1,0 +1,37 @@
+#!/usr/bin/env python3
+import sys
+import threading
+from threading import Thread
+import socket
+from socket import *
+
+def receive_from_client(realClient, addr):
+    while True:
+        client_request, _ = realClient.recvfrom(2048)
+        print('Received a request!')
+
+def proxy_server(serverPort):
+    serverSocket = socket(AF_INET, SOCK_STREAM)
+    serverSocket.bind((b'0.0.0.0', serverPort))
+    serverSocket.listen()
+    while True:
+        print('Connection success!')
+        conn, addr = serverSocket.accept()
+        connection = Thread(target=receive_from_client, args=(conn, addr,), daemon=True)
+        connection.start()
+
+if __name__ == '__main__':   
+    print('Waiting for connection...')
+    # serverPort = int(sys.argv[1])
+    serverPort = 12345
+
+    # set up port and socket
+    # proxy server:
+    server = threading.Thread(target=proxy_server, args=(serverPort,), daemon=True)
+    server.start()
+
+    # proxy client:
+    # clientSocket = socket(AF_INET, SOCK_STREAM)
+    # clientSocket.bind((b'0.0.0.0', serverPort))
+    while True: 
+        pass
