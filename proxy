@@ -8,7 +8,23 @@ from socket import *
 def receive_from_client(realClient, addr):
     while True:
         client_request, _ = realClient.recvfrom(2048)
-        print('Received a request!')
+        if client_request:
+            # print(client_request)
+            print('Received a request!')
+            temp = client_request.rstrip()
+            data = temp.decode('utf-8')
+            print(data)
+
+            for line in data.splitlines():
+                # find host
+
+        # hostAddress = None
+        # clientSocket = socket(AF_INET, SOCK_STREAM)
+        # clientSocket.bind((b'0.0.0.0', serverPort))
+        # # send all the lines to hostAddress
+
+
+
 
 def proxy_server(serverPort):
     serverSocket = socket(AF_INET, SOCK_STREAM)
@@ -23,7 +39,7 @@ def proxy_server(serverPort):
 if __name__ == '__main__':   
     print('Waiting for connection...')
     # serverPort = int(sys.argv[1])
-    serverPort = 12345
+    serverPort = 26742
 
     # set up port and socket
     # proxy server:
