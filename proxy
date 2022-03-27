@@ -5,26 +5,48 @@ from threading import Thread
 import socket
 from socket import *
 
-def receive_from_client(realClient, addr):
+def wait_for_messages(proxyClient, realClient):
+    #rcv a message
+    print('Successful connection!')
     while True:
-        client_request, _ = realClient.recvfrom(2048)
-        if client_request:
+        packet = proxyClient.recv(2048)
+    
+        #TODO: edit header
+    
+        #pass to real client
+        realClient.send(packet)
+    pass
+
+def receive_from_client(realClient):
+    host = False # bad solution
+    proxyClient = None
+    while True:
+        client_request = realClient.recv(2048) #TODO: post whole message
+        if not host and client_request:
             # print(client_request)
             print('Received a request!')
             temp = client_request.rstrip()
             data = temp.decode('utf-8')
-            print(data)
+            
+            line_set = data.splitlines()
+            print(line_set[0])
 
-            # for line in data.splitlines():
-                # find host
+            for line in line_set:
+                temp2 = line.lstrip()
+                if temp2[:4].lower() == 'host':
+                    hostAddress = line[line.find(':') + 1:].lstrip().rstrip()
+                    break
+            hostPort = 80 #TODO: parse for port number
+            host = True
 
-        # hostAddress = None
-        # clientSocket = socket(AF_INET, SOCK_STREAM)
-        # clientSocket.bind((b'0.0.0.0', serverPort))
-        # # send all the lines to hostAddress
-
-
-
+            proxyClient = socket(AF_INET, SOCK_STREAM)
+            proxyClient.connect((hostAddress, hostPort))
+            
+            server = threading.Thread(target=wait_for_messages, args=(proxyClient,realClient), daemon=True)
+            server.start()
+        
+        if host:
+            proxyClient.send(client_request)
 
 def proxy_server(serverPort):
     serverSocket = socket(AF_INET, SOCK_STREAM)
@@ -33,13 +55,15 @@ def proxy_server(serverPort):
     while True:
         print('Connection success!')
         conn, addr = serverSocket.accept()
-        connection = Thread(target=receive_from_client, args=(conn, addr,), daemon=True)
+        connection = Thread(target=receive_from_client, args=(conn,), daemon=True)
         connection.start()
+
+SERVER_P = 26728
 
 if __name__ == '__main__':   
     print('Waiting for connection...')
     # serverPort = int(sys.argv[1])
-    serverPort = 26742
+    serverPort = SERVER_P
 
     # set up port and socket
     # proxy server:
