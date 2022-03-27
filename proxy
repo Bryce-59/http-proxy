@@ -7,14 +7,37 @@ from socket import *
 
 # messages from server -> proxy -> client (browser)
 def sendResponses(proxyClientSocket, realClientSocket):
+    print("Found a server")
     while True:
         #rcv a message
         packet = proxyClientSocket.recv(2048)
         #TODO: edit header
+        # print(packet.decode("utf-8","backslashreplace"))
     
         #pass to real client
         realClientSocket.send(packet)
-    
+
+def editHeader(clientRequest):
+
+    data = clientRequest.decode("utf-8","backslashreplace")   
+    # line_set = data.splitlines()
+    # if line_set[0].find('HTTP/1.1') != -1:
+    #     line_set[0].replace('HTTP/1.1', 'HTTP/1.0')
+
+    # for line in line_set:
+    #     if line.lower().find('connection:') != -1:
+    #         line.replace('keep-alive','close')
+    #         return 
+    print("BEFORE: ",data)
+    data = data.replace("HTTP/1.1", "HTTP/1.0")
+
+    temp = data[data.lower().find("connection:"):]
+    temp = temp.replace("keep-alive","close")
+    temp2 = data[:data.lower().find("connection:")]
+    temp2 = temp2.join(temp)
+
+    print("AFTER: ",temp2)
+    return temp2.encode("utf-8")
 
 # messages from client (browser) -> proxy -> server
 def handleRequests(clientSocket):
@@ -22,26 +45,45 @@ def handleRequests(clientSocket):
         clientRequest = clientSocket.recv(2048)
         if clientRequest:
             temp = clientRequest.rstrip()
-            data = temp.decode('utf-8')
+            data = temp.decode("utf-8","backslashreplace")
             
             line_set = data.splitlines()
             print(line_set[0])
 
+            hostPort = 80
             for line in line_set:
                 temp2 = line.lstrip()
                 if temp2[:4].lower() == 'host':
-                    hostAddress = line[line.find(':') + 1:].lstrip().rstrip()
+                    hostAddress = line[line.find(':') + 1:].lstrip().rstrip() #HOST:[<adddress>:<port>]
+                    index = hostAddress.find(':')
+                    
+                    if index != -1:
+                        hostPort = int(hostAddress[hostAddress.find(':') + 1:].lstrip().rstrip()) #HOST:<address>:[port] || HOST:<address>[]
+                        hostAddress = hostAddress[:hostAddress.find(':')].rstrip() #HOST:[<address>]:<port>
+                    else:
+                        # GET <address>:<port>
+                        # GET <<http>:<address>>:<port>
+
+                        req_index = line_set[0].find(':')
+                        part_one = line_set[0][req_index + 1:].lstrip().rstrip()
+                        while req_index != -1:
+                            part_one = part_one[req_index + 1:].lstrip().rstrip()
+                            if part_one.isnumeric():
+                                hostPort = int(part_one)
+                                break
+                            req_index = part_one.find(':')
                     break
-            hostPort = 80 #TODO: parse for port number
-            host = True
 
             serverSocket = socket(AF_INET, SOCK_STREAM)
             serverSocket.connect((hostAddress, hostPort))
             
             serverThread = threading.Thread(target=sendResponses, args=(serverSocket,clientSocket), daemon=True)
             serverThread.start()
+
+            #edit header
+            newHeader = editHeader(clientRequest)
             
-            serverSocket.send(clientRequest)
+            serverSocket.send(newHeader)
 
 def findClients(proxySocket):
     
@@ -54,7 +96,7 @@ def findClients(proxySocket):
 
 if __name__ == '__main__':   
     # serverPort = int(sys.argv[1])
-    serverPort = 36784
+    serverPort = 36735
 
     # proxy server:
     proxySocket = socket(AF_INET, SOCK_STREAM)
