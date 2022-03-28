@@ -5,6 +5,11 @@ from threading import Thread
 import socket
 from socket import *
 
+# TODO: upgrade editHeader()
+# TODO: clean up output()
+# TODO: keyboard should only close if EOF
+# TODO: add logging
+
 # TCP Proxy Structure:
 # _________________________________________________________
 # main () ... opens proxy socket and starts the proxyThread
@@ -19,7 +24,6 @@ def sendResponses(proxyClientSocket, realClientSocket):
     while True:
         #rcv a message
         packet = proxyClientSocket.recv(2048)
-        #TODO: edit header
         # print(packet.decode("utf-8","backslashreplace"))
     
         #pass to real client
