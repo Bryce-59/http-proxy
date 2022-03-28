@@ -5,6 +5,15 @@ from threading import Thread
 import socket
 from socket import *
 
+# TCP Proxy Structure:
+# _________________________________________________________
+# main () ... opens proxy socket and starts the proxyThread
+# | - > findClients () ... waits for clients to connect and starts clientThread
+#       | - >   handleRequests () ... sends messages from client -> proxy -> server
+#               | - - - > fetchHost() ... parse client's message for address and port (helper method)
+#               | - - -> editHeader() ... edit client's message before sending it to server (helper method)
+#               | - > sendResponses() ... sends messages from server -> proxy -> client
+
 # messages from server -> proxy -> client (browser)
 def sendResponses(proxyClientSocket, realClientSocket):
     print("Found a server")
@@ -39,64 +48,78 @@ def editHeader(clientRequest):
     print("AFTER: ",temp2)
     return temp2.encode("utf-8")
 
+def fetchHost(line_set):
+    # HOST: <address>:<port>
+    # HOST: <address>
+    hostAddress = None
+    for line in line_set:
+        temp = line.lstrip()
+        if temp[:4].lower() == 'host':
+            hostAddress = line[line.find(':') + 1:].lstrip().rstrip() #HOST:[<address>:<port>] || HOST:[<address>]
+
+            indexOne = hostAddress.find(':')
+            if indexOne != -1:
+                # print(hostAddress,"found")
+                return hostAddress[:indexOne], int(hostAddress[indexOne + 1:].lstrip().rstrip()) #HOST:<address>:[<port>]
+            else:
+                break
+            
+    # GET <http/s>:<address>:<port>
+    # GET <http/s>:<address>
+    # GET <address>:<port>
+    # GET <address>
+    tempString = line_set[0]
+    indexTwo = line_set[0].find(':')
+    while indexTwo != -1:
+        tempString = tempString[indexTwo + 1:].lstrip().rstrip()
+        if tempString.isnumeric():
+            # print(hostAddress,tempString)
+            return hostAddress, int(tempString) 
+        indexTwo = tempString.find(':')     
+    
+    # http  = 80
+    # https = 403
+    if line_set[0].find('https://') != -1:
+        # print(hostAddress,403)
+        return hostAddress, 403
+    # print(hostAddress,80)
+    return hostAddress, 80
+
 # messages from client (browser) -> proxy -> server
 def handleRequests(clientSocket):
     while True:
-        clientRequest = clientSocket.recv(2048)
-        if clientRequest:
-            temp = clientRequest.rstrip()
-            data = temp.decode("utf-8","backslashreplace")
+        request = clientSocket.recv(2048)
+        if request:
+            data = request.decode("utf-8","backslashreplace")
             
+            # print the first line
             line_set = data.splitlines()
             print(line_set[0])
 
-            hostPort = 80
-            for line in line_set:
-                temp2 = line.lstrip()
-                if temp2[:4].lower() == 'host':
-                    hostAddress = line[line.find(':') + 1:].lstrip().rstrip() #HOST:[<adddress>:<port>]
-                    index = hostAddress.find(':')
-                    
-                    if index != -1:
-                        hostPort = int(hostAddress[hostAddress.find(':') + 1:].lstrip().rstrip()) #HOST:<address>:[port] || HOST:<address>[]
-                        hostAddress = hostAddress[:hostAddress.find(':')].rstrip() #HOST:[<address>]:<port>
-                    else:
-                        # GET <address>:<port>
-                        # GET <<http>:<address>>:<port>
-
-                        req_index = line_set[0].find(':')
-                        part_one = line_set[0][req_index + 1:].lstrip().rstrip()
-                        while req_index != -1:
-                            part_one = part_one[req_index + 1:].lstrip().rstrip()
-                            if part_one.isnumeric():
-                                hostPort = int(part_one)
-                                break
-                            req_index = part_one.find(':')
-                    break
-
+            # parse the request to find address and port of host
+            hostAddress, hostPort = fetchHost(line_set)
             serverSocket = socket(AF_INET, SOCK_STREAM)
+            # establish connection with the host
             serverSocket.connect((hostAddress, hostPort))
-            
             serverThread = threading.Thread(target=sendResponses, args=(serverSocket,clientSocket), daemon=True)
             serverThread.start()
 
-            #edit header
-            newHeader = editHeader(clientRequest)
-            
-            serverSocket.send(newHeader)
+            # edit the request
+            #newHeader = editHeader(request)
+            # send request to host
+            serverSocket.send(request)
 
 def findClients(proxySocket):
-    
     proxySocket.listen()
     while True:
-        clientSocket, clientAddress = proxySocket.accept()
+        clientSocket, _ = proxySocket.accept()
         
         clientThread = Thread(target=handleRequests, args=(clientSocket,), daemon=True)
         clientThread.start()
 
 if __name__ == '__main__':   
     # serverPort = int(sys.argv[1])
-    serverPort = 36735
+    serverPort = 36796
 
     # proxy server:
     proxySocket = socket(AF_INET, SOCK_STREAM)
@@ -105,7 +128,7 @@ if __name__ == '__main__':
     proxyThread = threading.Thread(target=findClients, args=(proxySocket,), daemon=True)
     proxyThread.start()
     
-    while True:
+    while True: # TODO: should only quit after EOF
         text = sys.stdin.readline()
         if (not text or (text == "q\n" and sys.stdin.isatty())):
             break
