@@ -1,2 +1,2 @@
 #!/bin/bash
-./run 12345
+./proxy $1 $2

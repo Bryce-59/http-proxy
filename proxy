@@ -1,14 +1,29 @@
 #!/usr/bin/env python3
+import json
+import os
 import sys
 import threading
 from threading import Thread
 import socket
 from socket import *
+import uuid
 
+# minor
 # TODO: upgrade editHeader()
 # TODO: clean up output()
 # TODO: keyboard should only close if EOF
-# TODO: add logging
+# TODO: close client
+# TODO: fix send-all
+# TODO: handle HTTPS://
+# TODO: should output include HTTP/1.1 or /1.0?
+
+# major
+# TODO: write run script
+# TODO: write MAKEFILE
+
+# post-checkpoint
+# TODO: support CONNECTED requests
+# TODO: design doc
 
 # TCP Proxy Structure:
 # _________________________________________________________
@@ -20,13 +35,20 @@ from socket import *
 #               | - > sendResponses() ... sends messages from server -> proxy -> client
 
 # messages from server -> proxy -> client (browser)
-def sendResponses(proxyClientSocket, realClientSocket):
+def sendResponses(proxyClientSocket, realClientSocket, file_name=None):
     while True:
         #rcv a message
         packet = proxyClientSocket.recv(2048)
-        # print(packet.decode("utf-8","backslashreplace"))
-    
-        #pass to real client
+        if packet:
+            data_packet = packet.decode("utf-8","backslashreplace")
+            # print(packet.decode("utf-8","backslashreplace"))
+            if logging:
+                # print("this is file name", file_name)
+                with open(file_name, 'r') as file:
+                    data = json.load(file)
+                    data["Server response received"] = data_packet
+                    json.dump(data, open(file_name, "w"), indent = 3)
+            #pass to real client
         realClientSocket.send(packet)
 
 def editHeader(clientRequest):
@@ -43,7 +65,7 @@ def editHeader(clientRequest):
     data = data.replace("HTTP/1.1", "HTTP/1.0")
     data = data.replace("keep-alive", "close") ##
     
-    return data.encode("utf-8") ## 
+    return data ## 
 
     # temp = data[data.lower().find("connection:"):]
     # temp = temp.replace("keep-alive","close")
@@ -89,41 +111,85 @@ def fetchHost(line_set):
     return hostAddress, 80
 
 # messages from client (browser) -> proxy -> server
-def handleRequests(clientSocket):
+def handleRequests(clientSocket, addr):
     while True:
         request = clientSocket.recv(2048)
         if request:
             data = request.decode("utf-8","backslashreplace")
             
+            file_name = None
             # print the first line
             line_set = data.splitlines()
-            print('>>> ', line_set[0])
+            print(addr, '>>> ', line_set[0])
+
+            # edit the request
+            newHeader = editHeader(request)
 
             # parse the request to find address and port of host
             hostAddress, hostPort = fetchHost(line_set)
             serverSocket = socket(AF_INET, SOCK_STREAM)
-            # establish connection with the host
-            serverSocket.connect((hostAddress, hostPort))
-            serverThread = threading.Thread(target=sendResponses, args=(serverSocket,clientSocket), daemon=True)
-            serverThread.start()
 
-            # edit the request
-            newHeader = editHeader(request)
+            if logging:
+                # directory
+                directory = hostAddress
+    
+                # Parent Directory path 
+                parent_dir = os.path.join(os.getcwd(), 'Log')
+                    
+                # Path 
+                path = os.path.join(parent_dir, directory)
+                # path = os.getcwd() # == ./p1-bryce-and-raquel/
+                if not os.path.isdir(path):
+                    os.mkdir(path)
+                
+                path = os.path.join(path, hostAddress)
+                this_uuid = str(uuid.uuid1())
+                file_name = path + '.' + this_uuid + '.json'
+                # print(file_name)
+                # file_name.join('.',this_uuid,'.json')
+                # Data to be written
+                dictionary = {
+                    "Incoming header" : data, 
+                    "Modified header" : newHeader,
+                    # "Server response received" : "blank"
+                }
+
+                # Serializing json 
+                json_object = json.dumps(dictionary, indent = 3)
+                
+                # write to json file
+                with open(file_name, "w") as outfile:
+                    outfile.write(json_object)
+
             # send request to host
             # print(newHeader.decode("utf-8","backslashreplace"))
-            serverSocket.send(request)
+
+            # establish connection with the host
+            serverSocket.connect((hostAddress, hostPort))
+            serverThread = threading.Thread(target=sendResponses, args=(serverSocket,clientSocket,file_name), daemon=True)
+            serverThread.start()
+
+            serverSocket.send(newHeader.encode('utf-8'))
 
 def findClients(proxySocket):
     proxySocket.listen()
     while True:
-        clientSocket, _ = proxySocket.accept()
+        clientSocket, addr = proxySocket.accept()
         
-        clientThread = Thread(target=handleRequests, args=(clientSocket,), daemon=True)
+        clientThread = Thread(target=handleRequests, args=(clientSocket, addr), daemon=True)
         clientThread.start()
 
+logging = False
+
 if __name__ == '__main__':   
-    # serverPort = int(sys.argv[1])
-    serverPort = 36740
+    serverPort = int(sys.argv[1])
+    if len(sys.argv) > 2 and sys.argv[2].lower() == 'log':
+        logging = True
+        path = os.getcwd() # == ./p1-bryce-and-raquel/
+        path = os.path.join(path,'Log')
+        # path = 'D:/Log' # might need spaces
+        if not os.path.isdir(path):
+            os.mkdir(path)
 
     # proxy server:
     proxySocket = socket(AF_INET, SOCK_STREAM)
