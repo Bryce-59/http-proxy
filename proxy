@@ -142,8 +142,8 @@ def handleRequests(clientSocket, addr):
             
             if line_set[0].lower().find('connect') != -1:
                 print(addr, '>>> ', line_set[0])
-
-                response = "HTTP/1.0 502 BAD GATEWAY \r\n\r\n"
+                
+                response = "HTTP/1.0 502 Bad Gateway \r\n\r\n"
                 if serverSocket.connect_ex((hostAddress, hostPort)) == 0:
                     serverThread = threading.Thread(target=startResponse, args=(serverSocket,clientSocket,file_name), daemon=True)
                     clientThread = threading.Thread(target=startConnect, args=(serverSocket,clientSocket,file_name), daemon=True)
@@ -154,6 +154,7 @@ def handleRequests(clientSocket, addr):
                     logMessage("Proxy response sent",response,file_name)
                 
                 clientSocket.send(response.encode('utf-8'))
+                break
             else: 
                 # edit the request
                 newHeader = editHeader(request, file_name)
