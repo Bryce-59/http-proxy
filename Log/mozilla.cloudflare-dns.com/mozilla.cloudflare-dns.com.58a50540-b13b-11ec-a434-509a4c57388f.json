@@ -1,0 +1,4 @@
+{
+   "Incoming header": "CONNECT mozilla.cloudflare-dns.com:443 HTTP/1.1\r\nUser-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:98.0) Gecko/20100101 Firefox/98.0\r\nProxy-Connection: keep-alive\r\nConnection: keep-alive\r\nHost: mozilla.cloudflare-dns.com:443\r\n\r\n",
+   "Proxy response sent": "HTTP/1.0 200 OK\r\n"
+}

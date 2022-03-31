@@ -26,14 +26,18 @@ import uuid
 #               | - - -> editHeader() ... edit client's message before sending it to server (helper method)
 #               | - > sendResponses() ... sends messages from server -> proxy -> client [NON-CONNECT]
 #               | - - -> connection() ... opens connection between two sockets [CONNECT]
+#               |
 #               | - - -> logMessage() ... (helper method)
 
+# Method to log messages to a json file
 def logMessage(msgTitle, msgBody, logPath):
     data = json.load(open(logPath, 'r'))
     data[msgTitle] = msgBody
     json.dump(data, open(logPath, "w"), indent = 3)
 
-# messages from client -> proxy -> server (browser) (CONNECT)
+# Method to send messages from
+# server -> proxy -> client and
+# client -> proxy -> server (CONNECT)
 def connection(socket_rcv, socket_snd):
     while True:
         #rcv a message
@@ -44,7 +48,8 @@ def connection(socket_rcv, socket_snd):
             socket_snd.close()
             break
 
-# messages from server -> proxy -> client (browser)
+# Method to send messages from
+# server -> proxy -> client (browser)
 def sendResponses(serverSocket, clientSocket, logPath=None):
     while True:
         #rcv a message
@@ -56,7 +61,7 @@ def sendResponses(serverSocket, clientSocket, logPath=None):
             #pass to real client
             clientSocket.sendall(packet)
 
-
+# TODO:
 def editHeader(clientRequest, logPath=None):
 
     header = clientRequest.decode("utf-8","backslashreplace")
@@ -68,6 +73,7 @@ def editHeader(clientRequest, logPath=None):
 
     return header
 
+# Method to find (hostAddress, hostPort) from a request header
 def fetchHost(line_set):
     # HOST: <address>:<port>
     # HOST: <address>
@@ -109,7 +115,7 @@ def handleRequests(clientSocket, addr, logPath=None):
             header = request.decode("utf-8","backslashreplace")
     
             line_set = header.splitlines()
-            print(addr, '>>> ', line_set[0])
+            print(addr[0], '>>> ', line_set[0])
 
             # parse the request to find address and port of host
             hostAddress, hostPort = fetchHost(line_set)
@@ -138,29 +144,36 @@ def handleRequests(clientSocket, addr, logPath=None):
                 response = "HTTP/1.0 200 OK\r\n"
                 try:
                     serverSocket.connect((hostAddress, hostPort))
+                    clientSocket.send(response.encode("utf-8"))
+                    if logPath is not None:
+                        logMessage("Proxy response sent",response,logPath)
                 except Exception:
                     response = "HTTP/1.0 502 Bad Gateway\r\n"
+                    clientSocket.send(response.encode("utf-8"))
+                    if logPath is not None:
+                        logMessage("Proxy response sent",response,logPath)
+                    
+                    break
                 
                 # establish two-way connection
-                threading.Thread(target=connection, args=(serverSocket,clientSocket), daemon=True).start()
-                threading.Thread(target=connection, args=(clientSocket,serverSocket), daemon=True).start()
-                
-                # send and log the response
-                clientSocket.send(response.encode("utf-8"))
-                if logPath is not None:
-                    logMessage("Proxy response sent",response,logPath)
+                serverThread = threading.Thread(target=connection, args=(serverSocket,clientSocket))
+                clientThread = threading.Thread(target=connection, args=(clientSocket,serverSocket))
+
+                serverThread.start()
+                clientThread.start()
                 
             else: #if otherwise
-                # edit the request
-                newHeader = editHeader(request, logPath)
 
                 # establish connection with the host
                 serverSocket.connect((hostAddress, hostPort))
-                serverThread = threading.Thread(target=sendResponses, args=(serverSocket,clientSocket,logPath), daemon=True)
-                serverThread.start()
 
                 #send the response
+                newHeader = editHeader(request, logPath)
                 serverSocket.send(newHeader.encode('utf-8'))
+
+                # send messages from the host to the client
+                serverThread = threading.Thread(target=sendResponses, args=(serverSocket,clientSocket,logPath))
+                serverThread.start()
             
             break
 
@@ -169,7 +182,7 @@ def findClients(proxySocket, logPath=None):
     while True:
         clientSocket, addr = proxySocket.accept()
         
-        clientThread = Thread(target=handleRequests, args=(clientSocket, addr, logPath), daemon=True)
+        clientThread = threading.Thread(target=handleRequests, args=(clientSocket, addr, logPath))
         clientThread.start()
 
 if __name__ == '__main__':   
@@ -185,7 +198,7 @@ if __name__ == '__main__':
     proxySocket = socket(AF_INET, SOCK_STREAM)
     proxySocket.bind((b'0.0.0.0', serverPort))
 
-    proxyThread = threading.Thread(target=findClients, args=(proxySocket,logPath), daemon=True)
+    proxyThread = threading.Thread(target=findClients, args=(proxySocket,logPath))
     proxyThread.start()
     
     while True:
