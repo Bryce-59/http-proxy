@@ -137,18 +137,21 @@ def handleRequests(clientSocket, addr, logPath=None):
                 json_object = json.dumps(dictionary, indent = 3)
                 with open(logPath, "w") as outfile:
                     outfile.write(json_object)
-            
+            #TODO:
+            # can it handle a lot of traffic. acccess websites taht load a lot 
+            # of dynanimc content at the same time. reddit cnn twitch youtube 
+
             # respond to request
             if line_set[0].lower().find('connect') != -1: #if CONNECT
                 # get the response
-                response = "HTTP/1.0 200 OK\r\n"
+                response = "HTTP/1.0 200 OK\r\n\r\n"
                 try:
                     serverSocket.connect((hostAddress, hostPort))
                     clientSocket.send(response.encode("utf-8"))
                     if logPath is not None:
                         logMessage("Proxy response sent",response,logPath)
                 except Exception:
-                    response = "HTTP/1.0 502 Bad Gateway\r\n"
+                    response = "HTTP/1.0 502 Bad Gateway\r\n\r\n"
                     clientSocket.send(response.encode("utf-8"))
                     if logPath is not None:
                         logMessage("Proxy response sent",response,logPath)

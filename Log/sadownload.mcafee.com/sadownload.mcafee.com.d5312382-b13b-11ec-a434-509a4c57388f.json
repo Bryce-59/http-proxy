@@ -1,4 +1,0 @@
-{
-   "Incoming header": "CONNECT sadownload.mcafee.com:443 HTTP/1.1\r\nHost: sadownload.mcafee.com:443\r\n\r\n",
-   "Proxy response sent": "HTTP/1.0 200 OK\r\n"
-}
