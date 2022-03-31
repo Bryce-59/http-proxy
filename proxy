@@ -9,12 +9,13 @@ from socket import *
 import uuid
 
 # what is left:
-# TODO: check CONNECT
+# TODO: implement CONNECT
+# TODO: finish DESIGN DOC
 # TODO: fix up editHeader()
-# TODO: implement correct ways to close client
-# TODO: send() or sendall()
-# TODO: handle HTTPS://
-# TODO: design doc
+
+# small stuff:
+# TODO: do we need gethostbyaddress?
+# TODO: close out better in sendResponses
 
 # TCP Proxy Structure:
 # _________________________________________________________
@@ -23,48 +24,47 @@ import uuid
 #       | - >   handleRequests () ... sends messages from client -> proxy -> server
 #               | - - - > fetchHost() ... parse client's message for address and port (helper method)
 #               | - - -> editHeader() ... edit client's message before sending it to server (helper method)
-#               | - > startResponse() ... sends messages from server -> proxy -> client
-#               | - >  startConnect()  ... sends messages from client -> proxy -> server (CONNECT)
+#               | - > sendResponses() ... sends messages from server -> proxy -> client [NON-CONNECT]
+#               | - - -> connection() ... opens connection between two sockets [CONNECT]
+#               | - - -> logMessage() ... (helper method)
 
-# messages from client -> proxy -> server (browser)
-def startConnect(serverSocket, clientSocket):
+def logMessage(msgTitle, msgBody, logPath):
+    data = json.load(open(logPath, 'r'))
+    data[msgTitle] = msgBody
+    json.dump(data, open(logPath, "w"), indent = 3)
+
+# messages from client -> proxy -> server (browser) (CONNECT)
+def connection(socket_rcv, socket_snd):
     while True:
-        #rcv a message TODO: sendall?
-        packet = clientSocket.recv(2048)
-        serverSocket.send(packet)
+        #rcv a message
+        try:
+            socket_snd.sendall(socket_rcv.recv(2048))
+        except Exception:
+            socket_rcv.close()
+            socket_snd.close()
+            break
 
 # messages from server -> proxy -> client (browser)
-def startResponse(serverSocket, clientSocket, file_name=None):
+def sendResponses(serverSocket, clientSocket, logPath=None):
     while True:
         #rcv a message
         packet = serverSocket.recv(2048)
-        
-        if logging and file_name is not None:
-            logMessage("Server response received",packet.decode("utf-8","backslashreplace"),file_name)
-        
-        #pass to real client
-        clientSocket.send(packet)
+        if packet:
+            data_packet = packet.decode("utf-8","backslashreplace")
+            if logPath is not None:
+                logMessage("Server response received",data_packet,logPath)
+            #pass to real client
+            clientSocket.sendall(packet)
 
-def logMessage(title, message, file_name):
-    data = json.load(open(file_name, 'r'))
-    data[title] = message
-    json.dump(data, open(file_name, "w"), indent = 3)    
 
-def editHeader(clientRequest, file_name=None):
-    header = clientRequest.decode("utf-8","backslashreplace")   
-    # line_set = data.splitlines()
-    # if line_set[0].find('HTTP/1.1') != -1:
-    #     line_set[0].replace('HTTP/1.1', 'HTTP/1.0')
+def editHeader(clientRequest, logPath=None):
 
-    # for line in line_set:
-    #     if line.lower().find('connection:') != -1:
-    #         line.replace('keep-alive','close')
-    #         return 
-    header = header.replace("HTTP/1.1", "HTTP/1.0") #TODO: elaborate on this
+    header = clientRequest.decode("utf-8","backslashreplace")
+    header = header.replace("HTTP/1.1", "HTTP/1.0")
     header = header.replace("keep-alive", "close")
     
-    if logging and file_name is not None:
-        logMessage("Modified header",header,file_name)
+    if logPath is not None:
+        logMessage("Modified header",header,logPath)
 
     return header
 
@@ -102,99 +102,95 @@ def fetchHost(line_set):
     return hostAddress, 80
 
 # messages from client (browser) -> proxy -> server
-def handleRequests(clientSocket, addr):
+def handleRequests(clientSocket, addr, logPath=None):
     while True:
         request = clientSocket.recv(2048)
         if request:
             header = request.decode("utf-8","backslashreplace")
-            
-            file_name = None
-            # parse the request to find address and port of host
+    
             line_set = header.splitlines()
+            print(addr, '>>> ', line_set[0])
+
+            # parse the request to find address and port of host
             hostAddress, hostPort = fetchHost(line_set)
             serverSocket = socket(AF_INET, SOCK_STREAM)
 
-            if logging:
-                parent_dir = os.path.join(os.getcwd(), 'Log')
-                    
-                # Path 
-                path = os.path.join(parent_dir, hostAddress)
-                if not os.path.isdir(path):
-                    os.mkdir(path)
-                
+            if logPath is not None and hostAddress is not None:
+                # Directory
+                dir_path = os.path.join(logPath, hostAddress)
+                if not os.path.isdir(dir_path):
+                    os.mkdir(dir_path)
+                # File
                 this_uuid = str(uuid.uuid1())
                 file_name = hostAddress + '.' + this_uuid + '.json'
-                path = os.path.join(file_name, hostAddress)
-                
-                # Data to be written
+                logPath = os.path.join(dir_path, file_name)
+                # Data
                 dictionary = {
-                    "Incoming header" : header, 
-                    # "Modified header" : newHeader,
-                    # "Server response received" : "blank"
+                    "Incoming header" : header,
                 }
-
-                # Serializing json 
-                json_object = json.dumps(dictionary, indent=3)
-                
-                # write to json file
-                with open(file_name, "w") as outfile:
+                json_object = json.dumps(dictionary, indent = 3)
+                with open(logPath, "w") as outfile:
                     outfile.write(json_object)
             
-            if line_set[0].lower().find('connect') != -1:
-                print(addr, '>>> ', line_set[0])
+            # respond to request
+            if line_set[0].lower().find('connect') != -1: #if CONNECT
+                # get the response
+                response = "HTTP/1.0 200 OK\r\n"
+                try:
+                    serverSocket.connect((hostAddress, hostPort))
+                except Exception:
+                    response = "HTTP/1.0 502 Bad Gateway\r\n"
                 
-                response = "HTTP/1.0 502 Bad Gateway \r\n\r\n"
-                if serverSocket.connect_ex((hostAddress, hostPort)) == 0:
-                    serverThread = threading.Thread(target=startResponse, args=(serverSocket,clientSocket,file_name), daemon=True)
-                    clientThread = threading.Thread(target=startConnect, args=(serverSocket,clientSocket,file_name), daemon=True)
-                    serverThread.start()
-                    response = "HTTP/1.0 200 OK \r\n\r\n"
-
-                if logging and file_name:
-                    logMessage("Proxy response sent",response,file_name)
+                # establish two-way connection
+                threading.Thread(target=connection, args=(serverSocket,clientSocket), daemon=True).start()
+                threading.Thread(target=connection, args=(clientSocket,serverSocket), daemon=True).start()
                 
-                clientSocket.send(response.encode('utf-8'))
-                break
-            else: 
+                # send and log the response
+                clientSocket.send(response.encode("utf-8"))
+                if logPath is not None:
+                    logMessage("Proxy response sent",response,logPath)
+                
+            else: #if otherwise
                 # edit the request
-                newHeader = editHeader(request, file_name)
-                
-                print(addr, '>>> ', newHeader.splitlines()[0])
+                newHeader = editHeader(request, logPath)
 
                 # establish connection with the host
                 serverSocket.connect((hostAddress, hostPort))
-                serverThread = threading.Thread(target=startResponse, args=(serverSocket,clientSocket,file_name), daemon=True)
+                serverThread = threading.Thread(target=sendResponses, args=(serverSocket,clientSocket,logPath), daemon=True)
                 serverThread.start()
 
+                #send the response
                 serverSocket.send(newHeader.encode('utf-8'))
+            
+            break
 
-def findClients(proxySocket):
+def findClients(proxySocket, logPath=None):
     proxySocket.listen()
     while True:
         clientSocket, addr = proxySocket.accept()
         
-        clientThread = Thread(target=handleRequests, args=(clientSocket, addr), daemon=True)
+        clientThread = Thread(target=handleRequests, args=(clientSocket, addr, logPath), daemon=True)
         clientThread.start()
 
-logging = False
 if __name__ == '__main__':   
     serverPort = int(sys.argv[1])
-    if len(sys.argv) > 2 and sys.argv[2].lower() == 'log':
-        logging = True
+    logPath = None
 
-        dir_path = os.path.join(os.getcwd(),'Log')
-        if not os.path.isdir(dir_path):
-            os.mkdir(dir_path)
+    if len(sys.argv) > 2 and sys.argv[2].lower() == 'log':
+        logPath = os.path.join(os.getcwd(),'Log')
+        if not os.path.isdir(logPath):
+            os.mkdir(logPath)
 
     # proxy server:
     proxySocket = socket(AF_INET, SOCK_STREAM)
     proxySocket.bind((b'0.0.0.0', serverPort))
 
-    proxyThread = threading.Thread(target=findClients, args=(proxySocket,), daemon=True)
+    proxyThread = threading.Thread(target=findClients, args=(proxySocket,logPath), daemon=True)
     proxyThread.start()
     
-    while True: # TODO: should only quit after EOF
+    while True:
         text = sys.stdin.readline()
-        if (not text or (text == "q\n" and sys.stdin.isatty())):
+        if (not text):
             break
+    
     proxySocket.close()
