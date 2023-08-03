@@ -165,7 +165,8 @@ def handleRequests(clientSocket, addr, logPath=None):
                 serverThread.start()
             
             break
-
+        
+# wait for clients to connect
 def findClients(proxySocket, logPath=None):
     proxySocket.listen()
     while True:
