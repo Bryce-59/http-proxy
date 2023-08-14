@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
+
 import json
 import os
-import sys
-import threading
-from threading import Thread
-import socket
 from socket import *
+from threading import Thread
+import sys
 import uuid
 
 # TCP Proxy Structure:
@@ -147,8 +146,8 @@ def handleRequests(clientSocket, addr, logPath=None):
                     break
                 
                 # establish two-way connection
-                serverThread = threading.Thread(target=connection, args=(serverSocket,clientSocket), daemon=True)
-                clientThread = threading.Thread(target=connection, args=(clientSocket,serverSocket), daemon=True)
+                serverThread = Thread(target=connection, args=(serverSocket,clientSocket), daemon=True)
+                clientThread = Thread(target=connection, args=(clientSocket,serverSocket), daemon=True)
                 serverThread.start()
                 clientThread.start()
                 
@@ -161,7 +160,7 @@ def handleRequests(clientSocket, addr, logPath=None):
                 serverSocket.send(newHeader.encode('utf-8'))
 
                 # send messages from the host to the client
-                serverThread = threading.Thread(target=sendResponses, args=(serverSocket,clientSocket,logPath), daemon=True)
+                serverThread = Thread(target=sendResponses, args=(serverSocket,clientSocket,logPath), daemon=True)
                 serverThread.start()
             
             break
@@ -172,7 +171,7 @@ def findClients(proxySocket, logPath=None):
     while True:
         clientSocket, addr = proxySocket.accept()
         
-        clientThread = threading.Thread(target=handleRequests, args=(clientSocket, addr, logPath), daemon=True)
+        clientThread = Thread(target=handleRequests, args=(clientSocket, addr, logPath), daemon=True)
         clientThread.start()
 
 if __name__ == '__main__':   
@@ -188,7 +187,7 @@ if __name__ == '__main__':
     proxySocket = socket(AF_INET, SOCK_STREAM)
     proxySocket.bind((b'0.0.0.0', serverPort))
 
-    proxyThread = threading.Thread(target=findClients, args=(proxySocket,logPath), daemon=True)
+    proxyThread = Thread(target=findClients, args=(proxySocket,logPath), daemon=True)
     proxyThread.start()
     
     while True:
