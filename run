@@ -1,2 +1,0 @@
-#!/bin/bash
-./proxy $1 $2

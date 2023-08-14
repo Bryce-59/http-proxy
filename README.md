@@ -1,14 +1,12 @@
-Contributors:
--Bryce Richardson
--Raquel Moreno
+# About the Project
+A program created in 2022 to simulate a TCP proxy through HTTP.
 
-Description:
-____________
-A program created in 2022 to simulate a TCP proxy through HTTP. 
-
-How to Use:
-___________
+# How to Use
 Use the "make run" command to start the program from the Makefile. 
 Alternatively, directly enter "python3 ./proxy.py <port_number>" into the terminal.
 To see output, you must configure your computer's internet browser to pass traffic
 through the proxy.
+
+# Credits
+- 2022 Bryce Richardson
+- 2022 Raquel Moreno
